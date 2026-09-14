@@ -22,7 +22,7 @@ const NEWS_TTL = 60_000;
 function fail(req: any, res: any, err: unknown) {
   const detail = err instanceof Error ? err.message : String(err);
   console.error("[market]", req.path, detail);
-  res.status(502).json({ error: "All data providers are temporarily unavailable. Try again shortly.", detail });
+  res.status(502).json({ error: "All data providers are temporarily unavailable. Try again shortly." });
 }
 
 // ---- VIX: served from FRED (daily close), since it's an index rather than a
@@ -100,7 +100,16 @@ async function vixHistory(rangeKey: string): Promise<yahoo.Candle[]> {
  * Nasdaq's public quote API is primary (no key, generous limits); Yahoo and
  * Stooq are fallbacks. A symbol that fails everywhere still falls back to
  * its last-known value instead of failing the whole batch.
+ *
+ * Fan-out bound: the /quotes route caps `symbols` at 150, so a single call
+ * here does at most ~150 crypto lookups (only for recognized crypto symbols,
+ * mutually exclusive with the stages below) + up to 300 Nasdaq calls (2 per
+ * miss) + 1 batched Yahoo call + up to FALLBACK_PER_SYMBOL_CAP per-symbol
+ * Yahoo chart calls + up to FALLBACK_PER_SYMBOL_CAP Stooq calls + 1 batched
+ * TradingView call. Repetition beyond that is bounded by marketRouter's
+ * per-IP rate limit (see index.ts).
  */
+const FALLBACK_PER_SYMBOL_CAP = 20;
 async function getQuotes(symbols: string[]): Promise<yahoo.Quote[]> {
   const fresh = new Map<string, yahoo.Quote>();
   const missing: string[] = [];
@@ -149,17 +158,19 @@ async function getQuotes(symbols: string[]): Promise<yahoo.Quote[]> {
   }
 
   if (remaining.length > 0) {
-    const results = await Promise.allSettled(remaining.map((s) => yahoo.quoteFromChart(s)));
+    const batch = remaining.slice(0, FALLBACK_PER_SYMBOL_CAP);
+    const results = await Promise.allSettled(batch.map((s) => yahoo.quoteFromChart(s)));
     results.forEach((r, i) => {
-      if (r.status === "fulfilled") fetched.set(remaining[i], r.value);
+      if (r.status === "fulfilled") fetched.set(batch[i], r.value);
     });
     remaining = remaining.filter((s) => !fetched.has(s));
   }
 
   if (remaining.length > 0) {
-    const results = await Promise.allSettled(remaining.slice(0, 20).map((s) => stooq.quote(s)));
+    const batch = remaining.slice(0, FALLBACK_PER_SYMBOL_CAP);
+    const results = await Promise.allSettled(batch.map((s) => stooq.quote(s)));
     results.forEach((r, i) => {
-      if (r.status === "fulfilled") fetched.set(remaining[i], r.value);
+      if (r.status === "fulfilled") fetched.set(batch[i], r.value);
     });
   }
 
@@ -365,9 +376,13 @@ marketRouter.get("/crypto/global", async (req, res) => {
 });
 
 marketRouter.get("/crypto/orderbook/:symbol", async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  if (!binance.CRYPTO_SYMBOLS.has(symbol)) {
+    return res.status(400).json({ error: "unsupported crypto symbol" });
+  }
   try {
-    const data = await cached(`orderbook:${req.params.symbol}`, 5_000, () =>
-      withFallback([["binance", () => binance.orderBook(req.params.symbol)]])
+    const data = await cached(`orderbook:${symbol}`, 5_000, () =>
+      withFallback([["binance", () => binance.orderBook(symbol)]])
     );
     res.json(data);
   } catch (err) {

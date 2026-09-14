@@ -2,6 +2,7 @@
 // Free, no key, no rate-limit games (SEC just asks for an identifying User-Agent
 // and stays under ~10 req/s, both trivially satisfied here).
 import { XMLParser } from "fast-xml-parser";
+import { mapWithConcurrency } from "../concurrency.js";
 
 // SEC rejects requests whose User-Agent doesn't look like "<app/company> <contact-email>" —
 // a bare product name or URL gets a flat 403, so this exact shape matters. SEC uses it to
@@ -116,11 +117,16 @@ async function parseForm4(cik: string, filing: FilingRef): Promise<InsiderTransa
   });
 }
 
+// Bounds how many of a single request's Form 4 filings are fetched from
+// sec.gov at once, so one call to insiderTransactions() can't burst past the
+// ~10 req/s SEC asks callers to stay under (see file header).
+const SEC_FETCH_CONCURRENCY = 5;
+
 /** Most recent open-market insider transactions for a symbol, newest first. */
 export async function insiderTransactions(symbol: string, filingLimit = 20): Promise<InsiderTransaction[]> {
   const cik = await resolveCik(symbol);
   if (!cik) return [];
   const filings = await recentForm4Filings(cik, filingLimit);
-  const parsed = await Promise.all(filings.map((f) => parseForm4(cik, f).catch(() => [])));
+  const parsed = await mapWithConcurrency(filings, SEC_FETCH_CONCURRENCY, (f) => parseForm4(cik, f).catch(() => []));
   return parsed.flat().sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
 }

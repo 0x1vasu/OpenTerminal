@@ -12,6 +12,7 @@ mkdirSync(dataDir, { recursive: true });
 
 export const db = new Database(join(dataDir, "terminal.db"));
 db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS portfolios (

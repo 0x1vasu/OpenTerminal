@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, fmt, pctClass } from "../../lib/api";
+import { isSafeHttpUrl } from "../../lib/links";
 import { useTerminal } from "../../store/terminal";
 import Flash from "../Flash";
 
@@ -113,18 +114,24 @@ export default function RecapWidget() {
 
       <div className="border-t border-[#161616]">
         <div className="dim text-[10px] uppercase px-2 pt-1">Headlines</div>
-        {data.news.map((n, i) => (
-          <a
-            key={i}
-            href={n.link}
-            target="_blank"
-            rel="noreferrer"
-            className="block px-2 py-1 border-b border-[#161616] hover:bg-[#161616]"
-          >
-            <div className="truncate">{n.title}</div>
-            <div className="dim text-[10px]">{n.publisher}</div>
-          </a>
-        ))}
+        {data.news.map((n, i) => {
+          const body = (
+            <>
+              <div className="truncate">{n.title}</div>
+              <div className="dim text-[10px]">{n.publisher}</div>
+            </>
+          );
+          const className = "block px-2 py-1 border-b border-[#161616] hover:bg-[#161616]";
+          return isSafeHttpUrl(n.link) ? (
+            <a key={i} href={n.link} target="_blank" rel="noreferrer" className={className}>
+              {body}
+            </a>
+          ) : (
+            <div key={i} className={className}>
+              {body}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

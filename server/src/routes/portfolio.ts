@@ -45,12 +45,16 @@ portfolioRouter.post("/:id/transactions", (req, res) => {
   const parsed = txSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   const t = parsed.data;
-  const info = db
-    .prepare(
-      "INSERT INTO transactions (portfolio_id, symbol, side, quantity, price, executed_at) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .run(req.params.id, t.symbol, t.side, t.quantity, t.price, t.executed_at);
-  res.status(201).json({ id: info.lastInsertRowid, ...t });
+  try {
+    const info = db
+      .prepare(
+        "INSERT INTO transactions (portfolio_id, symbol, side, quantity, price, executed_at) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(req.params.id, t.symbol, t.side, t.quantity, t.price, t.executed_at);
+    res.status(201).json({ id: info.lastInsertRowid, ...t });
+  } catch {
+    res.status(404).json({ error: "portfolio not found" });
+  }
 });
 
 portfolioRouter.delete("/:id/transactions/:txId", (req, res) => {

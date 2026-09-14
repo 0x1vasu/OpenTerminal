@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiGet } from "../../lib/api";
+import { isSafeHttpUrl } from "../../lib/links";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
 
 type NewsItem = { title: string; link: string; publisher: string; publishedAt: string | null };
@@ -28,21 +29,27 @@ export default function NewsWidget({ widget }: { widget: WidgetInstance }) {
         </button>
       </div>
       {isLoading && <div className="p-2 dim">Loading news…</div>}
-      {data.map((n, i) => (
-        <a
-          key={i}
-          href={n.link}
-          target="_blank"
-          rel="noreferrer"
-          className="block px-2 py-1 border-b border-[#161616] hover:bg-[#161616]"
-        >
-          <div className="truncate">{n.title}</div>
-          <div className="dim text-[10px]">
-            {n.publisher}
-            {n.publishedAt ? " · " + new Date(n.publishedAt).toLocaleString() : ""}
+      {data.map((n, i) => {
+        const body = (
+          <>
+            <div className="truncate">{n.title}</div>
+            <div className="dim text-[10px]">
+              {n.publisher}
+              {n.publishedAt ? " · " + new Date(n.publishedAt).toLocaleString() : ""}
+            </div>
+          </>
+        );
+        const className = "block px-2 py-1 border-b border-[#161616] hover:bg-[#161616]";
+        return isSafeHttpUrl(n.link) ? (
+          <a key={i} href={n.link} target="_blank" rel="noreferrer" className={className}>
+            {body}
+          </a>
+        ) : (
+          <div key={i} className={className}>
+            {body}
           </div>
-        </a>
-      ))}
+        );
+      })}
     </div>
   );
 }
