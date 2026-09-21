@@ -39,7 +39,11 @@ const money = (s: unknown): number | null => {
 
 function assetClassOf(symbol: string): "stocks" | "etf" {
   // Heuristic: most well-known ETF tickers used across the app; falls back to "stocks".
-  const etfs = new Set(["SPY", "DIA", "QQQ", "GLD", "USO", "UUP", "IWM", "VTI", "TLT"]);
+  const etfs = new Set([
+    "SPY", "DIA", "QQQ", "GLD", "USO", "UUP", "IWM", "VTI", "TLT",
+    // EU macro widget index proxies (see routes/market.ts EU_INDEX_PROXIES)
+    "FEZ", "IEUR", "EWG", "EWU", "EWQ", "EWI",
+  ]);
   return etfs.has(symbol) ? "etf" : "stocks";
 }
 
